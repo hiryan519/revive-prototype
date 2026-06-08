@@ -32,7 +32,7 @@ export default function HelpPage() {
               <p>1. 确保浏览器已经显示书签栏。</p>
               <p>2. 用鼠标把“加入 Revive”按钮拖到书签栏。</p>
               <p>3. 打开任意想收藏的网页，点击这个书签。</p>
-              <p>4. 页面右下角会显示导入状态，成功后自动进入“最近收藏”内容集。</p>
+              <p>4. 页面右下角会显示导入状态；如果当前网站限制跨域请求，书签会自动打开 Revive 中转页继续导入。</p>
             </div>
             <div className="mt-6 rounded-[20px] border border-slate-200/80 bg-[linear-gradient(180deg,rgba(255,255,255,0.94),rgba(246,241,250,0.97))] px-4 py-4 text-[13px] leading-6 text-slate-500 shadow-[0_10px_20px_rgba(219,214,232,0.16)]">
               当前书签会调用：<span className="font-medium text-slate-700">{appUrl}/api/bookmarklet-import</span>
@@ -47,6 +47,9 @@ export default function HelpPage() {
               </div>
               <div className="rounded-[18px] border border-white/[0.06] bg-[linear-gradient(180deg,rgba(255,255,255,0.045),rgba(255,255,255,0.022))] px-4 py-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]">
                 所有书签导入内容都会自动归入“最近收藏”，方便你后续再整理到更明确的内容集。
+              </div>
+              <div className="rounded-[18px] border border-white/[0.06] bg-[linear-gradient(180deg,rgba(255,255,255,0.045),rgba(255,255,255,0.022))] px-4 py-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]">
+                某些网站会限制页面脚本直接请求本地或其他域名，遇到这种情况时，书签会自动打开 Revive 中转页来完成导入。
               </div>
               <div className="rounded-[18px] border border-white/[0.06] bg-[linear-gradient(180deg,rgba(255,255,255,0.045),rgba(255,255,255,0.022))] px-4 py-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]">
                 如果部署域名变化，只需要更新 <code>NEXT_PUBLIC_APP_URL</code>，页面里的书签代码会自动更新。
