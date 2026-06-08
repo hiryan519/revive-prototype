@@ -31,6 +31,10 @@ function resolveInitialScreen(initialScreen?: Screen): Screen {
   return "home";
 }
 
+function isDatabaseUnavailableMessage(message: string) {
+  return message.includes("数据库连接失败");
+}
+
 function HomeTaskPanel(props: {
   enabled: boolean;
   totalItems: number;
@@ -310,6 +314,7 @@ export function ReviveHome({ initialScreen }: { initialScreen?: Screen }) {
   const [currentCollection, setCurrentCollection] = useState<CollectionDetail | null>(null);
   const [loadingCollections, setLoadingCollections] = useState(true);
   const [pageError, setPageError] = useState<string | null>(null);
+  const [databaseUnavailable, setDatabaseUnavailable] = useState(false);
   const [importMode, setImportMode] = useState<ImportMode>("link");
   const [collectionName, setCollectionName] = useState("");
   const [urlValue, setUrlValue] = useState("");
@@ -347,6 +352,7 @@ export function ReviveHome({ initialScreen }: { initialScreen?: Screen }) {
       try {
         const payload = await readJson<{ collections: CollectionSummary[] }>("/api/collections");
         const list = payload.collections;
+        setDatabaseUnavailable(false);
         setCollections(list);
 
         const pickedId = nextCollectionId ?? currentCollectionId ?? list[0]?.id ?? null;
@@ -359,7 +365,18 @@ export function ReviveHome({ initialScreen }: { initialScreen?: Screen }) {
           await loadCollectionDetail(pickedId);
         }
       } catch (error) {
-        setPageError(error instanceof Error ? error.message : "读取内容集失败");
+        const message = error instanceof Error ? error.message : "读取内容集失败";
+
+        if (isDatabaseUnavailableMessage(message)) {
+          setDatabaseUnavailable(true);
+          setCollections([]);
+          setCurrentCollection(null);
+          setCurrentCollectionId(null);
+          setScreen((current) => (current === "import" ? current : "home"));
+          return;
+        }
+
+        setPageError(message);
       } finally {
         setLoadingCollections(false);
       }
@@ -546,6 +563,12 @@ export function ReviveHome({ initialScreen }: { initialScreen?: Screen }) {
       <main className="mx-auto w-full max-w-[1480px] px-4 pb-12 pt-6 sm:px-6 lg:px-8">
         {pageError ? (
           <div className="mb-6 rounded-[18px] border border-amber-200/70 bg-amber-50/90 px-4 py-3 text-[14px] leading-6 text-amber-900 shadow-[0_10px_20px_rgba(245,220,180,0.16)]">{pageError}</div>
+        ) : null}
+
+        {databaseUnavailable ? (
+          <div className="mb-6 rounded-[18px] border border-slate-200/80 bg-white/80 px-4 py-3 text-[13px] leading-6 text-slate-500 shadow-[0_8px_18px_rgba(219,214,232,0.14)]">
+            当前数据库暂未连通，页面先按未导入状态展示。修正 `.env.local` 里的 `DATABASE_URL` 后刷新即可恢复真实数据。
+          </div>
         ) : null}
 
         {screen === "home" ? (
