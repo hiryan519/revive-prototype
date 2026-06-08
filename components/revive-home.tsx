@@ -389,6 +389,26 @@ export function ReviveHome({ initialScreen }: { initialScreen?: Screen }) {
   }, [loadCollections]);
 
   useEffect(() => {
+    function refreshOnReturn() {
+      void loadCollections(currentCollectionId ?? undefined);
+    }
+
+    function handleVisibilityChange() {
+      if (document.visibilityState === "visible") {
+        refreshOnReturn();
+      }
+    }
+
+    window.addEventListener("focus", refreshOnReturn);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      window.removeEventListener("focus", refreshOnReturn);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [currentCollectionId, loadCollections]);
+
+  useEffect(() => {
     try {
       const stored = window.localStorage.getItem(SIDEBAR_STORAGE_KEY);
       if (stored === "1") {
