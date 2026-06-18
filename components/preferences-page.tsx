@@ -1,6 +1,6 @@
 "use client";
 
-import { Eye, EyeOff, Pencil, Plus, RotateCcw, Save, Trash2 } from "lucide-react";
+import { Check, Eye, EyeOff, Pencil, Plus, RotateCcw, Save, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import {
   cx,
@@ -375,24 +375,30 @@ export function PreferencesPage() {
                 <div className="grid grid-cols-2 gap-3">
                   <button
                     type="button"
+                    aria-pressed={form.polarity === "positive"}
                     onClick={() => setForm((current) => ({ ...current, polarity: "positive" }))}
                     className={cx(
                       ghost,
-                      "justify-center",
-                      form.polarity === "positive" && "border-emerald-200/80 bg-emerald-50 text-emerald-700",
+                      "justify-center gap-2",
+                      form.polarity === "positive" &&
+                        "!border-emerald-300 !bg-emerald-50 !text-emerald-700 ring-2 ring-emerald-100",
                     )}
                   >
+                    {form.polarity === "positive" ? <Check className="h-4 w-4" /> : null}
                     正向
                   </button>
                   <button
                     type="button"
+                    aria-pressed={form.polarity === "negative"}
                     onClick={() => setForm((current) => ({ ...current, polarity: "negative" }))}
                     className={cx(
                       ghost,
-                      "justify-center",
-                      form.polarity === "negative" && "border-amber-200/80 bg-amber-50 text-amber-700",
+                      "justify-center gap-2",
+                      form.polarity === "negative" &&
+                        "!border-amber-300 !bg-amber-50 !text-amber-700 ring-2 ring-amber-100",
                     )}
                   >
+                    {form.polarity === "negative" ? <Check className="h-4 w-4" /> : null}
                     负向
                   </button>
                 </div>
