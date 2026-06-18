@@ -22,6 +22,7 @@ import {
 import { CollectionsView, DoneView, ImportView } from "@/components/revive/views";
 
 const SIDEBAR_STORAGE_KEY = "revive-home-sidebar-collapsed";
+const RETURN_REFRESH_INTERVAL_MS = 5000;
 
 function resolveInitialScreen(initialScreen?: Screen): Screen {
   if (initialScreen === "import" || initialScreen === "collections" || initialScreen === "done" || initialScreen === "result") {
@@ -547,6 +548,8 @@ export function ReviveHome({ initialScreen }: { initialScreen?: Screen }) {
   const [deletingCollection, setDeletingCollection] = useState(false);
   const [deletingItemId, setDeletingItemId] = useState<string | null>(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const didInitialLoadRef = useRef(false);
+  const lastReturnRefreshRef = useRef(0);
 
   const currentSummary = collections.find((collection) => collection.id === currentCollectionId) ?? collections[0] ?? null;
   const hasImportedContent = collections.some((collection) => collection.itemCount > 0);
@@ -559,9 +562,14 @@ export function ReviveHome({ initialScreen }: { initialScreen?: Screen }) {
   }, []);
 
   const loadCollections = useCallback(
-    async (nextCollectionId?: string) => {
-      setLoadingCollections(true);
-      setPageError(null);
+    async (nextCollectionId?: string, options?: { silent?: boolean }) => {
+      const silent = options?.silent === true;
+
+      if (!silent) {
+        setLoadingCollections(true);
+        setPageError(null);
+      }
+
       try {
         const payload = await readJson<{ collections: CollectionSummary[] }>("/api/collections");
         const list = payload.collections;
@@ -578,6 +586,8 @@ export function ReviveHome({ initialScreen }: { initialScreen?: Screen }) {
           await loadCollectionDetail(pickedId);
         }
       } catch (error) {
+        if (silent) return;
+
         const message = error instanceof Error ? error.message : "读取内容集失败";
 
         if (isDatabaseUnavailableMessage(message)) {
@@ -591,19 +601,26 @@ export function ReviveHome({ initialScreen }: { initialScreen?: Screen }) {
 
         setPageError(message);
       } finally {
-        setLoadingCollections(false);
+        if (!options?.silent) {
+          setLoadingCollections(false);
+        }
       }
     },
     [currentCollectionId, loadCollectionDetail],
   );
 
   useEffect(() => {
+    if (didInitialLoadRef.current) return;
+    didInitialLoadRef.current = true;
     void loadCollections();
   }, [loadCollections]);
 
   useEffect(() => {
     function refreshOnReturn() {
-      void loadCollections(currentCollectionId ?? undefined);
+      const now = Date.now();
+      if (now - lastReturnRefreshRef.current < RETURN_REFRESH_INTERVAL_MS) return;
+      lastReturnRefreshRef.current = now;
+      void loadCollections(currentCollectionId ?? undefined, { silent: true });
     }
 
     function handleVisibilityChange() {
