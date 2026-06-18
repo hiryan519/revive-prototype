@@ -1,7 +1,18 @@
 import { createChunks } from "@/lib/chunking";
 import { embedText, embedTexts, runTaskWithModel } from "@/lib/ai";
+import { getCurrentUserId } from "@/lib/current-user";
 import { getDb } from "@/lib/db";
-import type { CollectionDetail, CollectionSummary, TaskResult } from "@/lib/types";
+import type {
+  CollectionDetail,
+  CollectionSummary,
+  MemoryDimension,
+  MemoryPolarity,
+  MemoryRecord,
+  MemoryScope,
+  MemorySource,
+  MemoryTaskType,
+  TaskResult,
+} from "@/lib/types";
 
 function vectorLiteral(embedding: number[]) {
   return `[${embedding.join(",")}]`;
@@ -9,6 +20,24 @@ function vectorLiteral(embedding: number[]) {
 
 function sqlString(value: string) {
   return `'${value.replace(/'/g, "''")}'`;
+}
+
+function mapMemoryRow(row: {
+  id: string;
+  userId: string;
+  scope: MemoryScope;
+  taskType: MemoryTaskType | null;
+  dimension: MemoryDimension;
+  value: string;
+  polarity: MemoryPolarity;
+  source: MemorySource;
+  sourceDetail: string | null;
+  confidence: number;
+  enabled: boolean;
+  createdAt: string;
+  updatedAt: string;
+}): MemoryRecord {
+  return row;
 }
 
 export async function upsertCollection(collectionName: string, description?: string | null) {
@@ -296,6 +325,194 @@ export async function deleteItem(itemId: string) {
   if (!deleted) {
     throw new Error("内容不存在");
   }
+}
+
+export async function getMemoriesByUser(userId: string): Promise<MemoryRecord[]> {
+  const db = getDb();
+  const rows = await db<MemoryRecord[]>`
+    select
+      id,
+      user_id as "userId",
+      scope,
+      task_type as "taskType",
+      dimension,
+      value,
+      polarity,
+      source,
+      source_detail as "sourceDetail",
+      confidence,
+      enabled,
+      created_at as "createdAt",
+      updated_at as "updatedAt"
+    from memories
+    where user_id = ${userId}
+    order by
+      case scope when 'global' then 0 else 1 end,
+      task_type asc nulls first,
+      created_at desc
+  `;
+
+  return rows.map(mapMemoryRow);
+}
+
+export async function createMemory(data: {
+  scope: MemoryScope;
+  taskType?: MemoryTaskType | null;
+  dimension: MemoryDimension;
+  value: string;
+  polarity?: MemoryPolarity;
+  source?: MemorySource;
+  sourceDetail?: string | null;
+  confidence?: number;
+  enabled?: boolean;
+}) {
+  const db = getDb();
+  const userId = getCurrentUserId();
+  const id = crypto.randomUUID();
+
+  const [created] = await db<MemoryRecord[]>`
+    insert into memories (
+      id,
+      user_id,
+      scope,
+      task_type,
+      dimension,
+      value,
+      polarity,
+      source,
+      source_detail,
+      confidence,
+      enabled
+    )
+    values (
+      ${id},
+      ${userId},
+      ${data.scope},
+      ${data.scope === "task_type" ? data.taskType ?? null : null},
+      ${data.dimension},
+      ${data.value},
+      ${data.polarity ?? "positive"},
+      ${data.source ?? "explicit_setting"},
+      ${data.sourceDetail ?? null},
+      ${data.confidence ?? 1},
+      ${data.enabled ?? true}
+    )
+    returning
+      id,
+      user_id as "userId",
+      scope,
+      task_type as "taskType",
+      dimension,
+      value,
+      polarity,
+      source,
+      source_detail as "sourceDetail",
+      confidence,
+      enabled,
+      created_at as "createdAt",
+      updated_at as "updatedAt"
+  `;
+
+  return created ? mapMemoryRow(created) : null;
+}
+
+export async function updateMemory(
+  id: string,
+  data: {
+    scope?: MemoryScope;
+    taskType?: MemoryTaskType | null;
+    dimension?: MemoryDimension;
+    value?: string;
+    polarity?: MemoryPolarity;
+    sourceDetail?: string | null;
+    enabled?: boolean;
+  },
+) {
+  const db = getDb();
+  const userId = getCurrentUserId();
+  const [existing] = await db<MemoryRecord[]>`
+    select
+      id,
+      user_id as "userId",
+      scope,
+      task_type as "taskType",
+      dimension,
+      value,
+      polarity,
+      source,
+      source_detail as "sourceDetail",
+      confidence,
+      enabled,
+      created_at as "createdAt",
+      updated_at as "updatedAt"
+    from memories
+    where id = ${id}
+      and user_id = ${userId}
+    limit 1
+  `;
+
+  if (!existing) {
+    return null;
+  }
+
+  const nextScope = data.scope ?? existing.scope;
+  const nextTaskType =
+    nextScope === "global"
+      ? null
+      : data.taskType !== undefined
+        ? data.taskType
+        : existing.taskType;
+
+  if (nextScope === "task_type" && !nextTaskType) {
+    throw new Error("任务类型级偏好需要指定任务类型");
+  }
+
+  const [updated] = await db<MemoryRecord[]>`
+    update memories
+    set
+      scope = ${nextScope},
+      task_type = ${nextTaskType},
+      dimension = ${data.dimension ?? existing.dimension},
+      value = ${data.value ?? existing.value},
+      polarity = ${data.polarity ?? existing.polarity},
+      source_detail = ${data.sourceDetail !== undefined ? data.sourceDetail : existing.sourceDetail},
+      enabled = ${data.enabled ?? existing.enabled}
+    where id = ${id}
+      and user_id = ${userId}
+    returning
+      id,
+      user_id as "userId",
+      scope,
+      task_type as "taskType",
+      dimension,
+      value,
+      polarity,
+      source,
+      source_detail as "sourceDetail",
+      confidence,
+      enabled,
+      created_at as "createdAt",
+      updated_at as "updatedAt"
+  `;
+
+  return updated ? mapMemoryRow(updated) : null;
+}
+
+export async function deleteMemory(id: string) {
+  const db = getDb();
+  const userId = getCurrentUserId();
+  const [deleted] = await db<{ id: string }[]>`
+    delete from memories
+    where id = ${id}
+      and user_id = ${userId}
+    returning id
+  `;
+
+  return deleted?.id ?? null;
+}
+
+export async function toggleMemory(id: string, enabled: boolean) {
+  return updateMemory(id, { enabled });
 }
 
 export async function runTask(params: { collectionId?: string; query: string }): Promise<TaskResult> {

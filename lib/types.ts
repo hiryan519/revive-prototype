@@ -27,6 +27,28 @@ export type ChunkRecord = {
   text: string;
 };
 
+export type MemoryScope = "global" | "task_type";
+export type MemoryTaskType = "plan" | "review" | "report";
+export type MemoryDimension = "output_structure" | "citation_style" | "expression_style" | "task_structure";
+export type MemoryPolarity = "positive" | "negative";
+export type MemorySource = "explicit_setting" | "user_feedback" | "behavior_inferred";
+
+export type MemoryRecord = {
+  id: string;
+  userId: string;
+  scope: MemoryScope;
+  taskType: MemoryTaskType | null;
+  dimension: MemoryDimension;
+  value: string;
+  polarity: MemoryPolarity;
+  source: MemorySource;
+  sourceDetail: string | null;
+  confidence: number;
+  enabled: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type TaskCitation = {
   collectionName: string;
   title: string;
