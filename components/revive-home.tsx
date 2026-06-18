@@ -222,7 +222,7 @@ const feedbackOptions = [
     id: "expression",
     label: "表达方式不对",
     dimension: "expression_style",
-    value: "调整表达方式，避免不符合我使用习惯的表述。",
+    value: "本次结果的表达方式不适合当前任务。",
   },
 ] as const;
 

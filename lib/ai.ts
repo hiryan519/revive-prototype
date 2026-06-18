@@ -212,8 +212,6 @@ ${JSON.stringify({
       },
     ];
 
-  console.log("=== INJECTED PROMPT ===", JSON.stringify(finalPrompt, null, 2));
-
   const response = await client.chat.completions.create({
     model,
     response_format: {
