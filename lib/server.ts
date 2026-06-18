@@ -11,7 +11,7 @@ import type {
   MemoryScope,
   MemorySource,
   MemoryTaskType,
-  TaskResult,
+  TaskRunResult,
 } from "@/lib/types";
 
 function vectorLiteral(embedding: number[]) {
@@ -515,7 +515,7 @@ export async function toggleMemory(id: string, enabled: boolean) {
   return updateMemory(id, { enabled });
 }
 
-export async function runTask(params: { collectionId?: string; query: string }): Promise<TaskResult> {
+export async function runTask(params: { collectionId?: string; query: string }): Promise<TaskRunResult> {
   const db = getDb();
   const queryEmbedding = await embedText(params.query);
   const rows = await db<
@@ -546,7 +546,7 @@ export async function runTask(params: { collectionId?: string; query: string }):
 
   const result = await runTaskWithModel(params.query, rows);
 
-  await db`
+  const [taskRun] = await db<{ id: string }[]>`
     insert into task_runs (collection_id, user_query, result_json, citations_json)
     values (
       ${params.collectionId ?? null},
@@ -554,7 +554,11 @@ export async function runTask(params: { collectionId?: string; query: string }):
       ${JSON.stringify(result)}::jsonb,
       ${JSON.stringify(result.citations)}::jsonb
     )
+    returning id
   `;
 
-  return result;
+  return {
+    taskRunId: taskRun.id,
+    result,
+  };
 }

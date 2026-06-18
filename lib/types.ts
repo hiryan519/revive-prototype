@@ -63,6 +63,11 @@ export type TaskResult = {
   citations: TaskCitation[];
 };
 
+export type TaskRunResult = {
+  taskRunId: string;
+  result: TaskResult;
+};
+
 export type CollectionSummary = {
   id: string;
   name: string;

@@ -1,6 +1,6 @@
 "use client";
 
-import { FolderOpen, PanelLeftClose, PanelLeftOpen, Plus, Sparkles } from "lucide-react";
+import { CheckCircle2, FolderOpen, PanelLeftClose, PanelLeftOpen, Plus, Sparkles, ThumbsDown, ThumbsUp } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import type { CollectionDetail, CollectionSummary, TaskResult } from "@/lib/types";
 import {
@@ -198,8 +198,218 @@ function HomeSidebar(props: {
   );
 }
 
+const feedbackOptions = [
+  {
+    id: "structure",
+    label: "结构不适合我",
+    dimension: "output_structure",
+    value: "不要沿用这次结果的结构方式，后续输出需要更贴合我的任务场景。",
+  },
+  {
+    id: "vague",
+    label: "太空泛",
+    dimension: "expression_style",
+    value: "不要输出空泛概括，关键建议需要更具体、可执行。",
+  },
+  {
+    id: "citation",
+    label: "引用不够支撑",
+    dimension: "citation_style",
+    value: "关键结论需要更充分的引用支撑，并说明引用如何支撑结论。",
+  },
+  {
+    id: "expression",
+    label: "表达方式不对",
+    dimension: "expression_style",
+    value: "调整表达方式，避免不符合我使用习惯的表述。",
+  },
+] as const;
+
+function ResultFeedback({ taskRunId }: { taskRunId: string | null }) {
+  const [expanded, setExpanded] = useState(false);
+  const [closed, setClosed] = useState(false);
+  const [selected, setSelected] = useState<string[]>([]);
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+  const [isError, setIsError] = useState(false);
+
+  async function recordFeedback(rating: "usable" | "unusable") {
+    if (!taskRunId) return;
+
+    try {
+      await readJson<{ success: true }>("/api/task-feedback", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ taskRunId, rating }),
+      });
+    } catch {
+      // Feedback logging should not block the preference write flow.
+    }
+  }
+
+  async function handleUsable() {
+    await recordFeedback("usable");
+    setExpanded(false);
+    setClosed(false);
+    setIsError(false);
+    setMessage("反馈已记录");
+  }
+
+  async function handleUnusable() {
+    await recordFeedback("unusable");
+    setExpanded(true);
+    setClosed(false);
+    setMessage(null);
+  }
+
+  async function rememberPreference() {
+    if (!selected.length || !taskRunId) return;
+
+    setSaving(true);
+    setMessage(null);
+    setIsError(false);
+
+    const dateText = new Intl.DateTimeFormat("zh-CN", {
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).format(new Date());
+    const sourceDetail = `${dateText} 任务反馈，任务 ID：${taskRunId}`;
+
+    try {
+      const selectedOptions = feedbackOptions.filter((option) => selected.includes(option.id));
+
+      await Promise.all(
+        selectedOptions.map((option) =>
+          readJson<{ memory: unknown }>("/api/memories", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              scope: "global",
+              dimension: option.dimension,
+              value: option.value,
+              polarity: "negative",
+              source: "user_feedback",
+              sourceDetail,
+            }),
+          }),
+        ),
+      );
+
+      setSelected([]);
+      setExpanded(false);
+      setMessage("偏好已记住");
+    } catch {
+      setIsError(true);
+      setMessage("写入失败，请重试");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (closed) {
+    return (
+      <section className={cx(panelMuted, "px-5 py-4 text-[13px] text-slate-500")}>
+        已收到本次反馈。
+      </section>
+    );
+  }
+
+  return (
+    <section className={cx(panelMuted, "px-5 py-5")}>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <div className="text-[11px] uppercase tracking-[0.24em] text-slate-400">Feedback</div>
+          <h3 className="mt-2 text-[15px] font-semibold text-slate-900">这次结果对你有用吗？</h3>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <button type="button" onClick={() => void handleUsable()} className={ghost}>
+            <ThumbsUp className="mr-2 h-4 w-4" />
+            结果可用
+          </button>
+          <button type="button" onClick={() => void handleUnusable()} className={ghost}>
+            <ThumbsDown className="mr-2 h-4 w-4" />
+            结果不可用
+          </button>
+        </div>
+      </div>
+
+      {expanded ? (
+        <div className="mt-5 border-t border-slate-200/70 pt-5">
+          <div className="text-[13px] font-medium text-slate-700">哪里不符合你的习惯？</div>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {feedbackOptions.map((option) => {
+              const active = selected.includes(option.id);
+
+              return (
+                <button
+                  key={option.id}
+                  type="button"
+                  onClick={() =>
+                    setSelected((current) =>
+                      current.includes(option.id)
+                        ? current.filter((item) => item !== option.id)
+                        : [...current, option.id],
+                    )
+                  }
+                  className={cx(
+                    "rounded-full border px-3 py-2 text-[13px] transition",
+                    active
+                      ? "border-amber-200/80 bg-amber-50 text-amber-800 shadow-[0_8px_16px_rgba(245,220,180,0.18)]"
+                      : "border-slate-200/80 bg-white/80 text-slate-600 hover:text-slate-900",
+                  )}
+                >
+                  {active ? <CheckCircle2 className="mr-1.5 inline h-3.5 w-3.5" /> : null}
+                  {option.label}
+                </button>
+              );
+            })}
+          </div>
+
+          {selected.length ? (
+            <div className="mt-5 rounded-[18px] border border-slate-200/80 bg-white/75 px-4 py-4 shadow-[0_10px_20px_rgba(219,214,232,0.14)]">
+              <div className="text-[13px] leading-6 text-slate-600">要让 Revive 记住这个偏好吗？确认后会写入“我的偏好”。</div>
+              <div className="mt-4 flex flex-wrap gap-3">
+                <button type="button" disabled={saving} onClick={() => void rememberPreference()} className={primary}>
+                  {saving ? "正在写入" : "记住这个偏好"}
+                </button>
+                <button
+                  type="button"
+                  disabled={saving}
+                  onClick={() => {
+                    setExpanded(false);
+                    setClosed(true);
+                    setSelected([]);
+                  }}
+                  className={secondary}
+                >
+                  仅此一次，不记住
+                </button>
+              </div>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+
+      {message ? (
+        <div
+          className={cx(
+            "mt-4 rounded-[16px] border px-4 py-3 text-[13px] leading-6",
+            isError
+              ? "border-rose-200/70 bg-rose-50/92 text-rose-900"
+              : "border-emerald-200/70 bg-emerald-50/92 text-emerald-800",
+          )}
+        >
+          {message}
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
 function ResultPanel(props: {
   taskText: string;
+  taskRunId: string | null;
   taskResult: TaskResult;
   copied: boolean;
   refOpen: boolean;
@@ -207,7 +417,7 @@ function ResultPanel(props: {
   onBack: () => void;
   onCopy: () => void;
 }) {
-  const { taskText, taskResult, copied, refOpen, setRefOpen, onBack, onCopy } = props;
+  const { taskText, taskRunId, taskResult, copied, refOpen, setRefOpen, onBack, onCopy } = props;
 
   return (
     <div className="space-y-6">
@@ -301,6 +511,8 @@ function ResultPanel(props: {
           </section>
         </aside>
       </div>
+
+      <ResultFeedback taskRunId={taskRunId} />
     </div>
   );
 }
@@ -328,6 +540,7 @@ export function ReviveHome({ initialScreen }: { initialScreen?: Screen }) {
   const [taskError, setTaskError] = useState<string | null>(null);
   const [runningTask, setRunningTask] = useState(false);
   const [taskResult, setTaskResult] = useState<TaskResult | null>(null);
+  const [taskRunId, setTaskRunId] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [refOpen, setRefOpen] = useState(false);
   const [renamingCollection, setRenamingCollection] = useState(false);
@@ -473,14 +686,16 @@ export function ReviveHome({ initialScreen }: { initialScreen?: Screen }) {
     setRunningTask(true);
     setTaskError(null);
     setTaskResult(null);
+    setTaskRunId(null);
 
     try {
-      const payload = await readJson<{ success: true; result: TaskResult }>("/api/run-task", {
+      const payload = await readJson<{ success: true; taskRunId: string; result: TaskResult }>("/api/run-task", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ collectionId: currentCollectionId ?? collections[0]?.id, query: taskText }),
       });
       setTaskResult(payload.result);
+      setTaskRunId(payload.taskRunId);
       setRefOpen(false);
       setScreen("result");
     } catch (error) {
@@ -701,7 +916,7 @@ export function ReviveHome({ initialScreen }: { initialScreen?: Screen }) {
         ) : null}
 
         {screen === "result" && taskResult ? (
-          <ResultPanel taskText={taskText} taskResult={taskResult} copied={copied} refOpen={refOpen} setRefOpen={setRefOpen} onBack={() => setScreen("home")} onCopy={() => { void handleCopyResult(); }} />
+          <ResultPanel taskText={taskText} taskRunId={taskRunId} taskResult={taskResult} copied={copied} refOpen={refOpen} setRefOpen={setRefOpen} onBack={() => setScreen("home")} onCopy={() => { void handleCopyResult(); }} />
         ) : null}
       </main>
     </div>

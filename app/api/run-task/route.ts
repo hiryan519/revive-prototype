@@ -13,11 +13,11 @@ const bodySchema = z.object({
 export async function POST(request: Request) {
   try {
     const body = bodySchema.parse(await request.json());
-    const result = await runTask(body);
+    const taskRun = await runTask(body);
 
     return NextResponse.json({
       success: true,
-      result,
+      ...taskRun,
     });
   } catch (error) {
     if (error instanceof ZodError) {
