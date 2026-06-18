@@ -32,6 +32,7 @@ export type MemoryTaskType = "plan" | "review" | "report";
 export type MemoryDimension = "output_structure" | "citation_style" | "expression_style" | "task_structure";
 export type MemoryPolarity = "positive" | "negative";
 export type MemorySource = "explicit_setting" | "user_feedback" | "behavior_inferred";
+export type TaskKind = MemoryTaskType | "unknown";
 
 export type MemoryRecord = {
   id: string;
@@ -66,6 +67,14 @@ export type TaskResult = {
 export type TaskRunResult = {
   taskRunId: string;
   result: TaskResult;
+};
+
+export type TaskMemoryPreferences = {
+  memoryIds: string[];
+  outputStructurePreference: string[];
+  citationPreference: string[];
+  expressionPreference: string[];
+  negativePreferences: string[];
 };
 
 export type CollectionSummary = {

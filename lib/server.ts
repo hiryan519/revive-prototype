@@ -11,6 +11,8 @@ import type {
   MemoryScope,
   MemorySource,
   MemoryTaskType,
+  TaskKind,
+  TaskMemoryPreferences,
   TaskRunResult,
 } from "@/lib/types";
 
@@ -38,6 +40,107 @@ function mapMemoryRow(row: {
   updatedAt: string;
 }): MemoryRecord {
   return row;
+}
+
+function identifyTaskKind(query: string): TaskKind {
+  const normalized = query.toLowerCase();
+
+  if (/(方案|策划|计划|执行|规划|roadmap|proposal|plan|strategy)/i.test(normalized)) {
+    return "plan";
+  }
+
+  if (/(复盘|回顾|总结|归因|反思|retro|review|postmortem)/i.test(normalized)) {
+    return "review";
+  }
+
+  if (/(汇报|提纲|报告|简报|周会|月会|述职|report|brief|update)/i.test(normalized)) {
+    return "report";
+  }
+
+  return "unknown";
+}
+
+function buildTaskMemoryPreferences(memories: MemoryRecord[]): TaskMemoryPreferences {
+  const selected = memories.filter((memory) => memory.enabled);
+
+  return {
+    memoryIds: selected.map((memory) => memory.id),
+    outputStructurePreference: selected
+      .filter(
+        (memory) =>
+          memory.polarity === "positive" &&
+          (memory.dimension === "output_structure" || memory.dimension === "task_structure"),
+      )
+      .map((memory) => memory.value),
+    citationPreference: selected
+      .filter((memory) => memory.polarity === "positive" && memory.dimension === "citation_style")
+      .map((memory) => memory.value),
+    expressionPreference: selected
+      .filter((memory) => memory.polarity === "positive" && memory.dimension === "expression_style")
+      .map((memory) => memory.value),
+    negativePreferences: selected
+      .filter((memory) => memory.polarity === "negative")
+      .map((memory) => memory.value),
+  };
+}
+
+export async function getTaskMemoryPreferences(userId: string, taskKind: TaskKind): Promise<TaskMemoryPreferences> {
+  const db = getDb();
+  const globalMemories = await db<MemoryRecord[]>`
+    select
+      id,
+      user_id as "userId",
+      scope,
+      task_type as "taskType",
+      dimension,
+      value,
+      polarity,
+      source,
+      source_detail as "sourceDetail",
+      confidence,
+      enabled,
+      created_at as "createdAt",
+      updated_at as "updatedAt"
+    from memories
+    where user_id = ${userId}
+      and scope = 'global'
+      and enabled = true
+    order by created_at desc
+  `;
+
+  const taskTypeMemories =
+    taskKind === "unknown"
+      ? []
+      : await db<MemoryRecord[]>`
+          select
+            id,
+            user_id as "userId",
+            scope,
+            task_type as "taskType",
+            dimension,
+            value,
+            polarity,
+            source,
+            source_detail as "sourceDetail",
+            confidence,
+            enabled,
+            created_at as "createdAt",
+            updated_at as "updatedAt"
+          from memories
+          where user_id = ${userId}
+            and scope = 'task_type'
+            and task_type = ${taskKind}
+            and enabled = true
+          order by created_at desc
+        `;
+
+  const taskDimensions = new Set(taskTypeMemories.map((memory) => memory.dimension));
+  const selectedMemories = [
+    ...globalMemories.filter((memory) => !taskDimensions.has(memory.dimension)).map(mapMemoryRow),
+    ...taskTypeMemories.map(mapMemoryRow),
+  ];
+
+  return buildTaskMemoryPreferences(selectedMemories);
 }
 
 export async function upsertCollection(collectionName: string, description?: string | null) {
@@ -517,6 +620,9 @@ export async function toggleMemory(id: string, enabled: boolean) {
 
 export async function runTask(params: { collectionId?: string; query: string }): Promise<TaskRunResult> {
   const db = getDb();
+  const userId = getCurrentUserId();
+  const taskKind = identifyTaskKind(params.query);
+  const memoryPreferences = await getTaskMemoryPreferences(userId, taskKind);
   const queryEmbedding = await embedText(params.query);
   const rows = await db<
     Array<{
@@ -544,15 +650,16 @@ export async function runTask(params: { collectionId?: string; query: string }):
     throw new Error("当前还没有可检索的收藏内容，请先导入内容");
   }
 
-  const result = await runTaskWithModel(params.query, rows);
+  const result = await runTaskWithModel(params.query, rows, memoryPreferences);
 
   const [taskRun] = await db<{ id: string }[]>`
-    insert into task_runs (collection_id, user_query, result_json, citations_json)
+    insert into task_runs (collection_id, user_query, result_json, citations_json, injected_memory_ids)
     values (
       ${params.collectionId ?? null},
       ${params.query},
       ${JSON.stringify(result)}::jsonb,
-      ${JSON.stringify(result.citations)}::jsonb
+      ${JSON.stringify(result.citations)}::jsonb,
+      ${JSON.stringify(memoryPreferences.memoryIds)}::jsonb
     )
     returning id
   `;
