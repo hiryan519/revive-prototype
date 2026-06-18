@@ -666,6 +666,14 @@ export function ReviveHome({ initialScreen }: { initialScreen?: Screen }) {
     setCollectionName(currentSummary.name);
   }, [screen, currentSummary, collectionName]);
 
+  function resetImportInputs() {
+    setUrlValue("");
+    setManualTitle("");
+    setManualValue("");
+    setImportError(null);
+    setShowFallback(false);
+  }
+
   async function handleImport(mode: ImportMode) {
     const hadImportedBefore = hasImportedContent;
 
@@ -684,6 +692,7 @@ export function ReviveHome({ initialScreen }: { initialScreen?: Screen }) {
       });
 
       setImportSummary(payload);
+      resetImportInputs();
       await loadCollections(payload.collectionId);
       setScreen(hadImportedBefore ? "done" : "home");
     } catch (error) {
