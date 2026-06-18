@@ -718,7 +718,7 @@ export function ReviveHome({ initialScreen }: { initialScreen?: Screen }) {
       const payload = await readJson<{ success: true; taskRunId: string; result: TaskResult }>("/api/run-task", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ collectionId: currentCollectionId ?? collections[0]?.id, query: taskText }),
+        body: JSON.stringify({ query: taskText }),
       });
       setTaskResult(payload.result);
       setTaskRunId(payload.taskRunId);

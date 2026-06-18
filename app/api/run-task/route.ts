@@ -6,7 +6,6 @@ import { getRouteError } from "@/lib/route-errors";
 export const runtime = "nodejs";
 
 const bodySchema = z.object({
-  collectionId: z.string().uuid("内容集 ID 不合法").optional(),
   query: z.string().trim().min(3, "请先输入任务需求").max(1200),
 });
 

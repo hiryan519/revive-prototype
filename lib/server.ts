@@ -618,7 +618,7 @@ export async function toggleMemory(id: string, enabled: boolean) {
   return updateMemory(id, { enabled });
 }
 
-export async function runTask(params: { collectionId?: string; query: string }): Promise<TaskRunResult> {
+export async function runTask(params: { query: string }): Promise<TaskRunResult> {
   const db = getDb();
   const userId = getCurrentUserId();
   const taskKind = identifyTaskKind(params.query);
@@ -642,7 +642,7 @@ export async function runTask(params: { collectionId?: string; query: string }):
     from chunks c
     inner join items i on i.id = c.item_id
     inner join collections on collections.id = c.collection_id
-    order by c.embedding <=> ${vectorLiteral(queryEmbedding)}::vector
+    order by (c.embedding <=> ${vectorLiteral(queryEmbedding)}::vector) + 0
     limit 5
   `;
 
@@ -655,7 +655,7 @@ export async function runTask(params: { collectionId?: string; query: string }):
   const [taskRun] = await db<{ id: string }[]>`
     insert into task_runs (collection_id, user_query, result_json, citations_json, injected_memory_ids)
     values (
-      ${params.collectionId ?? null},
+      ${null},
       ${params.query},
       ${JSON.stringify(result)}::jsonb,
       ${JSON.stringify(result.citations)}::jsonb,
