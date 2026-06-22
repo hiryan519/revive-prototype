@@ -1,4 +1,4 @@
-# Revive Prototype
+# Revive
 
 Revive 是一个 Web 优先的个人内容记忆与任务生成工具。
 
